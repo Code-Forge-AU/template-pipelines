@@ -27,12 +27,18 @@ jobs:
 
       - name: Build and Push Docker Images
         run: |
-            # Read the multi-line input into an array
-            IFS=$'\n' read -d '' -r -a services_array <<< "${{ inputs.services }}"
+          # Convert the input string into an array
+          readarray -t services_array <<< "${{ inputs.services }}"
+          
+          # Loop through each service
+          for service in "${services_array[@]}"
+          do
+            # Remove any leading/trailing whitespace
+            service=$(echo "$service" | xargs)
             
-            # Loop through each service
-            for service in "${services_array[@]}"
-            do
+            # Skip empty lines
+            [ -z "$service" ] && continue
+            
             # Split the service info into an array
             IFS=',' read -ra service_info <<< "$service"
             
@@ -44,7 +50,7 @@ jobs:
             echo "Building $service_name from $build_dir using $dockerfile"
             
             # Change to the build directory
-            cd "$GITHUB_WORKSPACE/$build_dir"
+            cd "$GITHUB_WORKSPACE/$build_dir" || exit 1
             
             # Build the Docker image
             docker build -f "$dockerfile" -t "$service_name:latest" .
@@ -56,8 +62,8 @@ jobs:
             docker push "localhost:32000/$service_name:latest"
             
             # Return to the workspace root
-            cd "$GITHUB_WORKSPACE"
-            done
+            cd "$GITHUB_WORKSPACE" || exit 1
+          done
         shell: /usr/bin/bash -e {0}
 
       - name: Deploy with Pulumi
