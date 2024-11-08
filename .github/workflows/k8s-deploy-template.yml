@@ -1,0 +1,48 @@
+name: Reusable Kubernetes Deployment Workflow
+
+on:
+  workflow_call:
+    inputs:
+      services:
+        description: 'List of services to build and deploy'
+        required: true
+        type: string
+      pulumi_stack:
+        description: 'Pulumi stack name'
+        required: true
+        type: string
+      pulumi_work_dir:
+        description: 'Directory containing Pulumi project'
+        required: true
+        type: string
+
+jobs:
+  build_push_and_deploy:
+    name: Build, Push, and Deploy
+    runs-on: [j8s-vps]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build and Push Docker Images
+        run: |
+          IFS=$'\n' read -d '' -r -a services_array <<< "${{ inputs.services }}"
+          for service in "${services_array[@]}"
+          do
+            IFS=',' read -ra service_info <<< "$service"
+            cd ${service_info[1]}
+            docker build -f ${service_info[2]} -t ${service_info[0]}:latest .
+            docker tag ${service_info[0]}:latest localhost:32000/${service_info[0]}:latest
+            docker push localhost:32000/${service_info[0]}:latest
+            cd $GITHUB_WORKSPACE
+          done
+
+      - name: Deploy with Pulumi
+        uses: pulumi/actions@v6
+        with:
+          command: up
+          stack-name: ${{ inputs.pulumi_stack }}
+          work-dir: ${{ inputs.pulumi_work_dir }}
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
