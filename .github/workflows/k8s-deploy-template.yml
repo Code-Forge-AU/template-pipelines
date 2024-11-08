@@ -27,8 +27,8 @@ jobs:
 
       - name: Build and Push Docker Images
         run: |
-          # Convert the input string into an array
-          readarray -t services_array <<< "${{ inputs.services }}"
+          # Split the input string into an array
+          IFS=$'\n' services_array=(${{ inputs.services }})
           
           # Loop through each service
           for service in "${services_array[@]}"
