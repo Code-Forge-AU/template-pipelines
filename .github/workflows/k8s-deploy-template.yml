@@ -27,16 +27,38 @@ jobs:
 
       - name: Build and Push Docker Images
         run: |
-          IFS=$'\n' read -d '' -r -a services_array <<< "${{ inputs.services }}"
-          for service in "${services_array[@]}"
-          do
+            # Read the multi-line input into an array
+            IFS=$'\n' read -d '' -r -a services_array <<< "${{ inputs.services }}"
+            
+            # Loop through each service
+            for service in "${services_array[@]}"
+            do
+            # Split the service info into an array
             IFS=',' read -ra service_info <<< "$service"
-            cd ${service_info[1]}
-            docker build -f ${service_info[2]} -t ${service_info[0]}:latest .
-            docker tag ${service_info[0]}:latest localhost:32000/${service_info[0]}:latest
-            docker push localhost:32000/${service_info[0]}:latest
-            cd $GITHUB_WORKSPACE
-          done
+            
+            # Extract service information
+            service_name="${service_info[0]}"
+            build_dir="${service_info[1]}"
+            dockerfile="${service_info[2]}"
+            
+            echo "Building $service_name from $build_dir using $dockerfile"
+            
+            # Change to the build directory
+            cd "$GITHUB_WORKSPACE/$build_dir"
+            
+            # Build the Docker image
+            docker build -f "$dockerfile" -t "$service_name:latest" .
+            
+            # Tag the image for the local registry
+            docker tag "$service_name:latest" "localhost:32000/$service_name:latest"
+            
+            # Push the image to the local registry
+            docker push "localhost:32000/$service_name:latest"
+            
+            # Return to the workspace root
+            cd "$GITHUB_WORKSPACE"
+            done
+        shell: /usr/bin/bash -e {0}
 
       - name: Deploy with Pulumi
         uses: pulumi/actions@v6
