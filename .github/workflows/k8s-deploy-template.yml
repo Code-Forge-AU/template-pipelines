@@ -30,33 +30,37 @@ jobs:
 
       - name: Build and Push Docker Images
         run: |
-          # Parse the YAML string into JSON
-          services_json=$(echo '${{ inputs.services }}' | yq eval -o=json -)
+          # Read the services input
+          services='${{ inputs.services }}'
           
-          # Loop through each service
-          echo "$services_json" | jq -c '.[]' | while read -r service; do
-            # Extract service information
-            service_name=$(echo $service | jq -r '.name')
-            build_dir=$(echo $service | jq -r '.dir')
-            dockerfile=$(echo $service | jq -r '.dockerfile')
-            
-            echo "Building $service_name from $build_dir using $dockerfile"
-            
-            # Change to the build directory
-            cd "$GITHUB_WORKSPACE/$build_dir" || exit 1
-            
-            # Build the Docker image
-            docker build -f "$dockerfile" -t "$service_name:latest" .
-            
-            # Tag the image for the local registry
-            docker tag "$service_name:latest" "localhost:32000/$service_name:latest"
-            
-            # Push the image to the local registry
-            docker push "localhost:32000/$service_name:latest"
-            
-            # Return to the workspace root
-            cd "$GITHUB_WORKSPACE" || exit 1
-          done
+          # Process each service
+          while IFS= read -r line; do
+            if [[ $line == "- name:"* ]]; then
+              # Start of a new service
+              service_name=$(echo "$line" | awk '{print $3}')
+            elif [[ $line == "  dir:"* ]]; then
+              build_dir=$(echo "$line" | awk '{print $2}')
+            elif [[ $line == "  dockerfile:"* ]]; then
+              dockerfile=$(echo "$line" | awk '{print $2}')
+              
+              echo "Building $service_name from $build_dir using $dockerfile"
+              
+              # Change to the build directory
+              cd "$GITHUB_WORKSPACE/$build_dir" || exit 1
+              
+              # Build the Docker image
+              docker build -f "$dockerfile" -t "$service_name:latest" .
+              
+              # Tag the image for the local registry
+              docker tag "$service_name:latest" "localhost:32000/$service_name:latest"
+              
+              # Push the image to the local registry
+              docker push "localhost:32000/$service_name:latest"
+              
+              # Return to the workspace root
+              cd "$GITHUB_WORKSPACE" || exit 1
+            fi
+          done <<< "$services"
         shell: /usr/bin/bash -e {0}
 
       - name: Deploy with Pulumi
