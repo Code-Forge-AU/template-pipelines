@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       services:
-        description: 'List of services to build and deploy'
+        description: 'JSON string of services to build and deploy'
         required: true
         type: string
       pulumi_stack:
@@ -15,9 +15,9 @@ on:
         description: 'Directory containing Pulumi project'
         required: true
         type: string
-    secrets:
       pulumi_access_token:
         required: true
+        type: string
 
 jobs:
   build_push_and_deploy:
@@ -29,38 +29,36 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build and Push Docker Images
+        env:
+          SERVICES_JSON: ${{ inputs.services }}
         run: |
-          # Read the services input
-          services='${{ inputs.services }}'
+          # Parse the JSON string into an array
+          services_array=$(echo "$SERVICES_JSON" | jq -c '.[]')
           
-          # Process each service
-          while IFS= read -r line; do
-            if [[ $line == "- name:"* ]]; then
-              # Start of a new service
-              service_name=$(echo "$line" | awk '{print $3}')
-            elif [[ $line == "  dir:"* ]]; then
-              build_dir=$(echo "$line" | awk '{print $2}')
-            elif [[ $line == "  dockerfile:"* ]]; then
-              dockerfile=$(echo "$line" | awk '{print $2}')
-              
-              echo "Building $service_name from $build_dir using $dockerfile"
-              
-              # Change to the build directory
-              cd "$GITHUB_WORKSPACE/$build_dir" || exit 1
-              
-              # Build the Docker image
-              docker build -f "$dockerfile" -t "$service_name:latest" .
-              
-              # Tag the image for the local registry
-              docker tag "$service_name:latest" "localhost:32000/$service_name:latest"
-              
-              # Push the image to the local registry
-              docker push "localhost:32000/$service_name:latest"
-              
-              # Return to the workspace root
-              cd "$GITHUB_WORKSPACE" || exit 1
-            fi
-          done <<< "$services"
+          # Loop through each service
+          echo "$services_array" | while read -r service; do
+            # Extract service information
+            service_name=$(echo $service | jq -r '.name')
+            build_dir=$(echo $service | jq -r '.dir')
+            dockerfile=$(echo $service | jq -r '.dockerfile')
+            
+            echo "Building $service_name from $build_dir using $dockerfile"
+            
+            # Change to the build directory
+            cd "$GITHUB_WORKSPACE/$build_dir" || exit 1
+            
+            # Build the Docker image
+            docker build -f "$dockerfile" -t "$service_name:latest" .
+            
+            # Tag the image for the local registry
+            docker tag "$service_name:latest" "localhost:32000/$service_name:latest"
+            
+            # Push the image to the local registry
+            docker push "localhost:32000/$service_name:latest"
+            
+            # Return to the workspace root
+            cd "$GITHUB_WORKSPACE" || exit 1
+          done
         shell: /usr/bin/bash -e {0}
 
       - name: Deploy with Pulumi
@@ -70,4 +68,4 @@ jobs:
           stack-name: ${{ inputs.pulumi_stack }}
           work-dir: ${{ inputs.pulumi_work_dir }}
         env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.pulumi_access_token }}
+          PULUMI_ACCESS_TOKEN: ${{ inputs.pulumi_access_token }}
