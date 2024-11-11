@@ -15,9 +15,10 @@ on:
         description: 'Directory containing Pulumi project'
         required: true
         type: string
-      PULUMI_ACCESS_TOKEN:
+    secrets:
+      pulumi_access_token:
         required: true
-        type: string
+
 
 jobs:
   build_push_and_deploy:
@@ -68,4 +69,4 @@ jobs:
           stack-name: ${{ inputs.pulumi_stack }}
           work-dir: ${{ inputs.pulumi_work_dir }}
         env:
-          PULUMI_ACCESS_TOKEN: ${{ inputs.PULUMI_ACCESS_TOKEN }}
+          PULUMI_ACCESS_TOKEN: ${{ secrets.pulumi_access_token }}
